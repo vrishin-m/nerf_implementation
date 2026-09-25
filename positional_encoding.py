@@ -1,32 +1,44 @@
-import math
+
 import torch
 
-L_pos = 10 
+
+L_pos = 10
 L_dir = 4
-#position will be size 60, direction 16
 
 
-def encode(p):
-    gammax,gammay,gammaz, gammatheta, gammaphi=[],[],[],[],[]
+def encode(positions, directions):
+    gammapos = []
+    gammadir = []
+
     for i in range(L_pos):
-        gammax.append(math.sin(2**i*math.pi*float(p[0])))
-        gammax.append( math.cos(2**i*math.pi*p[0]))
-        gammay.append( math.sin(2**i*math.pi*p[1]))
-        gammay.append( math.cos(2**i*math.pi*p[1]))
-        gammaz.append( math.sin(2**i*math.pi*p[2]) )
-        gammaz.append( math.cos(2**i*math.pi*p[2]))
+        frequency = 2 ** i * torch.pi
+
+        for coordinate in range(3):
+            value = positions[:, coordinate]
+
+            gammapos.append(torch.sin(frequency * value))
+            gammapos.append(torch.cos(frequency * value))
+
 
     for i in range(L_dir):
-        gammatheta.append(math.sin(2**i*math.pi*float(p[3])))
-        gammatheta.append( math.cos(2**i*math.pi*p[3]))
-        gammaphi.append( math.sin(2**i*math.pi*p[4]))
-        gammaphi.append( math.cos(2**i*math.pi*p[4]))
+        frequency = 2 ** i * torch.pi
 
-    gammapos = gammax+gammay+gammaz
-    gammadir= gammatheta+gammaphi
-    return torch.tensor(gammapos), torch.tensor(gammadir)
+        for coordinate in range(2):
+            value = directions[:, coordinate]
 
-    
-        
-p= torch.tensor([1,2,3,4,5])
-print(encode(p))
+            gammadir.append(torch.sin(frequency * value))
+            gammadir.append(torch.cos(frequency * value))
+
+
+    gammapos = torch.stack(gammapos, dim=1)
+    gammadir = torch.stack(gammadir, dim=1)
+
+    return gammapos, gammadir
+
+
+
+
+
+
+
+

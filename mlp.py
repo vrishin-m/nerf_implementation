@@ -1,22 +1,19 @@
-#this is the mlp thats going to give colors, sigma from position, view angle
-
 import torch
 from torch import nn
-from torch.utils.data import DataLoader
 from positional_encoding import encode
-from positional_encoding import L_dir,  L_pos
-
-hidden_size =128
-position, direction = encode(input)
+from positional_encoding import L_dir, L_pos
 
 
-class mlp(nn.module):
-    
+hidden_size = 128
+
+
+class mlp(nn.Module):
+
     def __init__(self):
         super().__init__()
-        self.flatten = nn.Flatten()
+
         self.sigma_network = nn.Sequential(
-            nn.Linear(6*L_pos, hidden_size),
+            nn.Linear(6 * L_pos, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
@@ -32,20 +29,29 @@ class mlp(nn.module):
         )
 
         self.rgb_network = nn.Sequential(
-            nn.Linear(hidden_size+4*L_dir, hidden_size/2),
+            nn.Linear(hidden_size + 4 * L_dir, hidden_size // 2),
             nn.ReLU(),
-            nn.Linear(hidden_size/2, 3)
-
+            nn.Linear(hidden_size // 2, 3),
+            nn.Sigmoid()
         )
 
         self.project_sigma = nn.Sequential(
-            nn.Linear(hidden_size,1),
+            nn.Linear(hidden_size, 1),
             nn.ReLU()
         )
 
-    def forward(self, position, direction):
-        position = self.flatten(position)
+    def forward(self, positions, directions):
+        position, direction = encode(positions, directions)
+
         sigma_embedding = self.sigma_network(position)
-        rgb = self.rgb_network(torch.cat((sigma_embedding, direction)))
+
+        rgb_input = torch.cat(
+            (sigma_embedding, direction),
+            dim=1
+        )
+
+        rgb = self.rgb_network(rgb_input)
+
         sigma = self.project_sigma(sigma_embedding)
-        return sigma,rgb
+
+        return sigma, rgb
