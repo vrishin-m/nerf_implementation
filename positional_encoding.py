@@ -1,17 +1,15 @@
-
 import torch
 
 
-L_pos = 10
-L_dir = 4
 
 
-def encode(positions, directions):
+
+def encode(positions, directions, L_pos =10, L_dir =4):
     gammapos = []
     gammadir = []
 
     for i in range(L_pos):
-        frequency = 2 ** i * torch.pi
+        frequency = (2 ** i) * torch.pi
 
         for coordinate in range(3):
             value = positions[:, coordinate]
@@ -21,7 +19,7 @@ def encode(positions, directions):
 
 
     for i in range(L_dir):
-        frequency = 2 ** i * torch.pi
+        frequency = (2 ** i) * torch.pi
 
         for coordinate in range(2):
             value = directions[:, coordinate]

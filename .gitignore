@@ -2,8 +2,14 @@
 venv/
 .venv/
 venv
+
+
 __pycache__
 __pycache__/
 pycache 
 data
 data/
+
+
+ray_marching.png
+ray_marching

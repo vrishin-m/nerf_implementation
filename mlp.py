@@ -8,7 +8,6 @@ hidden_size = 128
 
 
 class mlp(nn.Module):
-
     def __init__(self):
         super().__init__()
 
