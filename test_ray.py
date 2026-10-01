@@ -182,4 +182,4 @@ ax.set_title("NeRF Ray Generation + Ray Marching")
 
 ax.legend()
 
-plt.savefig("ray_marching.png")
+plt.savefig("images/ray_marching.png")

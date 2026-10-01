@@ -6,7 +6,7 @@ import math
 
 
 
-def generate_matrix(sample,batch_size, camera_angle_x, batch_number, image_resolution = 100):
+def generate_matrix(sample,batch_size, camera_angle_x, batch_number, image_resolution = 200):
    
     pose = sample["pose"]
 
