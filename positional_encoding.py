@@ -5,6 +5,7 @@ import torch
 
 
 def encode(positions, directions, L_pos =10, L_dir =4):
+    directions = directions.squeeze(1)
     gammapos = []
     gammadir = []
 
@@ -12,7 +13,7 @@ def encode(positions, directions, L_pos =10, L_dir =4):
         frequency = (2 ** i) * torch.pi
 
         for coordinate in range(3):
-            value = positions[:, coordinate]
+            value = positions[..., coordinate]
 
             gammapos.append(torch.sin(frequency * value))
             gammapos.append(torch.cos(frequency * value))
@@ -21,15 +22,16 @@ def encode(positions, directions, L_pos =10, L_dir =4):
     for i in range(L_dir):
         frequency = (2 ** i) * torch.pi
 
-        for coordinate in range(2):
-            value = directions[:, coordinate]
+        for coordinate in range(3):
+            value = directions[..., coordinate]
 
             gammadir.append(torch.sin(frequency * value))
             gammadir.append(torch.cos(frequency * value))
 
 
-    gammapos = torch.stack(gammapos, dim=1)
-    gammadir = torch.stack(gammadir, dim=1)
+    gammapos = torch.stack(gammapos, dim=-1)
+    gammadir = torch.stack(gammadir, dim=-1)
+    gammadir = gammadir.unsqueeze(1).expand(-1, gammapos.shape[1], -1)
 
     return gammapos, gammadir
 
