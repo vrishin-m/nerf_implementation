@@ -9,12 +9,11 @@ import math
 def generate_matrix(sample,batch_size, camera_angle_x, batch_number, image_resolution = 200):
    
     pose = sample["pose"]
-
     camera_position = pose[:3, 3]
     rays_direction = torch.zeros([batch_size,3])
     for i in range(batch_size):
-        x = (batch_number*batch_size + i)%image_resolution
-        y = (batch_number*batch_size +i)//image_resolution
+        x = ((batch_number-1)*batch_size + i)%image_resolution
+        y = ((batch_number-1)*batch_size +i)//image_resolution
         rays_direction[i]= directions(x,y,pose,camera_angle_x,image_resolution)
         
     return rays_direction, camera_position

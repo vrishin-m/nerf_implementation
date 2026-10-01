@@ -1,6 +1,7 @@
 #this is the "main program"
 #this manages the entire pipeline start to finish.
 
+import os
 import torch
 import matplotlib.pyplot as plt
 import torch.optim as optim
@@ -11,7 +12,7 @@ from ray_generation import march_rays
 from renderer import render_ray
 from mlp import mlp
 from loss import loss
-
+from validation import validate
 
 dataset, loader = create_dataloader(
     root_dir="data/lego",
@@ -22,84 +23,92 @@ dataset, loader = create_dataloader(
 
 print("Number of images:", len(dataset))
 
+#MAJOR THINGS TO TUNE
 image_res = 200
 batch_size = 1024
-
+learning_rate= 5e-4
 camera_angle_x = dataset.camera_angle_x
+near = 2.0
+far  = 8.0
+epochs = 10
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = mlp().to(device)
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+model = mlp(near=near, far=far).to(device)
+optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+
+checkpoint_dir = "checkpoints"
+os.makedirs(checkpoint_dir, exist_ok=True)
+os.makedirs("images", exist_ok=True)
 
 img_num=0
 
+for epoch in range(epochs):
+    for sample in dataset:
+        learning_rate -= 0.03e-4
+        img = sample["image"]
+        print(img.shape)
+        img_num+=1
+        rendered_img = []
+        for batch_num in range(1, image_res**2//batch_size +1 ):
+            optimizer.zero_grad()
 
-for sample in dataset:
-    img = sample["image"]
-    print(img.shape)
-    img_num+=1
-    rendered_img = []
-    for batch_num in range(1, image_res**2//batch_size +1 ):
+            batch_render = torch.zeros([batch_size, 3])
+            points, rays_direction, delta = march_rays(sample, camera_angle_x, batch_num, near, far, 128, batch_size)
+            sigma, rgb = model(points, rays_direction)
+            print("rgb miin,max, mean", rgb.min(), rgb.max(), rgb.mean())
+            print("sigma min, max, mean", sigma.min(), sigma.max(), sigma.mean())
+            print("batch number: ", batch_num, "processed")
+
+
+            
+            batch_render = render_ray(sigma, rgb, torch.tensor([1.0,1.0,1.0]), 6/127, 128)
+
+            rendered_img.append(batch_render.detach().cpu())
+            loss(batch_render, img, optimizer, batch_num, batch_size, image_res)
+
+
+        #this is for the points left over, in case img res squared doesnt perfectly divide batch size
+
         optimizer.zero_grad()
-
-        batch_render = torch.zeros([batch_size, 3])
-        points, rays_direction, delta = march_rays(sample, camera_angle_x, batch_num, 2,6,64,batch_size)
-        flattened = torch.flatten(points, end_dim=1)
+        batch_num+=1
+        remainder = image_res**2%batch_size
+        batch_render = torch.zeros([remainder, 3])
+        points, rays_direction, delta = march_rays(sample, camera_angle_x, batch_num, near, far, 128, remainder)
         sigma, rgb = model(points, rays_direction)
-        print(rgb.min(), rgb.max(), rgb.mean())
-        print(sigma.min(), sigma.max(), sigma.mean())
+
         print("batch number: ", batch_num, "processed")
 
-
-        for i in range(batch_size):
-            batch_render[i] = render_ray(sigma[i], rgb[i], torch.tensor([0,0,0]), 1/16, 64)
+        batch_render = render_ray(sigma, rgb, torch.tensor([1.0,1.0,1.0]), 6/127, 128)
 
         rendered_img.append(batch_render.detach().cpu())
         loss(batch_render, img, optimizer, batch_num, batch_size, image_res)
 
+        #saving the img
 
-    #this is for the points left over, in case img res squared doesnt perfectly divide batch size
+        
+        rendered_tensor= torch.cat(rendered_img,dim=0)
+        rendered_tensor= rendered_tensor.reshape(image_res, image_res, 3)
+        image_np = rendered_tensor.cpu().numpy()
+        plt.imshow(image_np)
+        plt.axis("off")
+        plt.savefig('images/rendered_img'+str(img_num)+".png", bbox_inches='tight', pad_inches=0)
+        print("image", img_num, "saved")
+        plt.close()  
 
-    optimizer.zero_grad()
-    batch_num+=1
-    remainder = image_res**2%batch_size
-    batch_render = torch.zeros([remainder, 3])
-    points, rays_direction, delta = march_rays(sample, camera_angle_x, batch_num, 2,6,64,remainder)
-    flattened = torch.flatten(points, end_dim=1)
-    sigma, rgb = model(points, rays_direction)
-    print("batch number: ", batch_num, "processed")
+        # Checkpoint every 10 images
+        if img_num % 10 == 0:
+            checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_{img_num}.pth")
+            checkpoint_data = {
+                "epoch": epoch,
+                "img_num": img_num,
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "learning_rate": learning_rate,
+            }
+            torch.save(checkpoint_data, checkpoint_path)
+            torch.save(checkpoint_data, os.path.join(checkpoint_dir, "checkpoint_latest.pth"))
+            print(f"Checkpoint saved at {checkpoint_path}")  
 
-
-
-    for i in range(remainder):
-        batch_render[i] = render_ray(sigma[i], rgb[i], torch.tensor([0,0,0]), 1/16, 64)
-
-
-    rendered_img.append(batch_render.detach().cpu())
-    loss(batch_render, img, optimizer, batch_num, batch_size, image_res)
-
-    #saving the img
-
-    
-    rendered_tensor= torch.cat(rendered_img,dim=0)
-    rendered_tensor= rendered_tensor.reshape(image_res, image_res, 3)
-    image_np = rendered_tensor.cpu().numpy()
-    plt.imshow(image_np)
-    plt.axis("off")
-    plt.savefig('images/rendered_img'+str(img_num)+".png", bbox_inches='tight', pad_inches=0)
-    plt.close()  
-
- 
-    
-
-
-
-
-
-    
-
-
-
-
-
-
+    print("\n"*5, "____________________________________________________")
+    print("EPOCH ", epoch, "done")
+    validate()
