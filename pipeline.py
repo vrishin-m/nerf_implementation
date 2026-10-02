@@ -40,14 +40,42 @@ checkpoint_dir = "checkpoints"
 os.makedirs(checkpoint_dir, exist_ok=True)
 os.makedirs("images", exist_ok=True)
 
-img_num=0
+img_num = 0
+start_epoch = 0
+start_img_idx = 0
 
-for epoch in range(epochs):
-    for sample in dataset:
+latest_ckpt_path = os.path.join(checkpoint_dir, "checkpoint_latest.pth")
+if os.path.exists(latest_ckpt_path):
+    print(f"Loading checkpoint from {latest_ckpt_path}...")
+    checkpoint = torch.load(latest_ckpt_path, map_location=device)
+    model.load_state_dict(checkpoint["model_state_dict"])
+    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    saved_epoch = checkpoint.get("epoch", 0)
+    img_num = checkpoint.get("img_num", 0)
+    saved_img_in_epoch = checkpoint.get("img_in_epoch", img_num % len(dataset))
+    learning_rate = checkpoint.get("learning_rate", learning_rate)
+
+    if saved_img_in_epoch == 0 and img_num > 0:
+        saved_img_in_epoch = len(dataset)
+
+    if saved_img_in_epoch >= len(dataset):
+        start_epoch = saved_epoch + 1
+        start_img_idx = 0
+    else:
+        start_epoch = saved_epoch
+        start_img_idx = saved_img_in_epoch
+
+    print(f"Resumed from epoch {start_epoch} (next image index {start_img_idx + 1}), total images processed: {img_num}")
+
+for epoch in range(start_epoch, epochs):
+    for idx, sample in enumerate(dataset):
+        if epoch == start_epoch and idx < start_img_idx:
+            continue
         learning_rate -= 0.03e-4
         img = sample["image"]
         print(img.shape)
-        img_num+=1
+        img_num += 1
+        img_in_epoch = idx + 1
         rendered_img = []
         for batch_num in range(1, image_res**2//batch_size +1 ):
             optimizer.zero_grad()
@@ -91,16 +119,18 @@ for epoch in range(epochs):
         image_np = rendered_tensor.cpu().numpy()
         plt.imshow(image_np)
         plt.axis("off")
-        plt.savefig('images/rendered_img'+str(img_num)+".png", bbox_inches='tight', pad_inches=0)
-        print("image", img_num, "saved")
+        image_save_path = f"images/rendered_epoch_{epoch}_img_{img_in_epoch}.png"
+        plt.savefig(image_save_path, bbox_inches='tight', pad_inches=0)
+        print(f"Image saved at {image_save_path} (total: {img_num})")
         plt.close()  
 
         # Checkpoint every 10 images
-        if img_num % 10 == 0:
-            checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_{img_num}.pth")
+        if img_in_epoch % 10 == 0:
+            checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_epoch_{epoch}_img_{img_in_epoch}.pth")
             checkpoint_data = {
                 "epoch": epoch,
                 "img_num": img_num,
+                "img_in_epoch": img_in_epoch,
                 "model_state_dict": model.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
                 "learning_rate": learning_rate,
@@ -109,6 +139,7 @@ for epoch in range(epochs):
             torch.save(checkpoint_data, os.path.join(checkpoint_dir, "checkpoint_latest.pth"))
             print(f"Checkpoint saved at {checkpoint_path}")  
 
-    print("\n"*5, "____________________________________________________")
-    print("EPOCH ", epoch, "done")
-    validate()
+    print("\n" * 3, "____________________________________________________")
+    print(f"EPOCH {epoch} done. Running evaluation...")
+    validate(model=model, epoch=epoch, device=device, near=near, far=far)
+    model.train()
